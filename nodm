@@ -1,0 +1,145 @@
+### BEGIN INIT INFO
+# Provides:       nodm
+# Should-Start:   console-screen kbd hal bluetooth
+# Required-Start: $remote_fs
+# Required-Stop:
+# Default-Start:  2 3 4 5
+# Default-Stop:
+# Short-Description: No Display Manager / Premine scripts some code from BAMT init.d/gdm / PIMP Modifications by sling00.
+### END INIT INFO
+#PIMP NODM V1.0.2
+
+set -e
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+DESC="Automatic Display Manager"
+NAME=nodm
+PIDDIR=/var/run/
+PIDFILE=${PIDDIR}/${NAME}.pid
+
+NODM_ENABLED=yes
+NODM_XINIT=/usr/bin/xinit
+NODM_FIRST_VT=7
+NODM_XSESSION=/etc/X11/Xsession
+NODM_X_OPTIONS="-nolisten tcp"
+NODM_USER=root
+NODM_MIN_SESSION_TIME=60
+if [ -f /etc/default/$NAME ]
+then
+	. /etc/default/$NAME
+fi
+
+export NODM_XINIT NODM_XSESSION NODM_X_OPTIONS NODM_USER NODM_MIN_SESSION_TIME NODM_FIRST_VT
+
+# If you change the user to a non-root user, make sure you
+# set allowed_users=anybody in /etc/X11/Xwrapper.config
+
+# Gracefully exit if the package or its dependencies have been removed (but not purged).
+#[ -x /usr/sbin/nodm ] || exit 
+
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+. /lib/lsb/init-functions
+
+#Define PiMP Variables
+PIMP_NOX=/nox
+PIMP_NOXRECONF=/opt/pimp/noxreconf
+PIMP_ATICONFIG=/usr/bin/aticonfig
+PIMP_XORGCONF=/etc/X11/xorg.conf
+PIMP_RM=/bin/rm
+
+case "$1" in
+	start)
+			log_action_msg "*** PREMINE TASKS STARTING ***"
+			log_action_msg "Starting $DESC" "$NAME"
+		if [[ -e /tmp/nomine ]]; #IF1 
+		then 
+			rm /tmp/nomine
+			log_warning_msg "PREMINE WARNING: /tmp/nomine was present, your last attempt at autoconfiguration failed...trying again anyway!"
+		fi #/tmp/nomine FI #1 / IF2 start
+ 		if [ "$NODM_ENABLED" = "no" ] || [ "$NODM_ENABLED" = "false" ];	
+		then log_warning_msg "Not starting $NAME because NODM_ENABLED is '$NODM_ENABLED' in /etc/default/$NAME"
+			exit 1
+		elif [[ -e $PIMP_NOX ]];
+	    then log_warning_msg "/nox is present, XORG WILL NOT START UNTIL THIS FILE IS REMOVED"									
+			exit 1
+		else
+		if [[ -e $PIMP_NOXRECONF ]]; #IF3
+		then	
+			log_warning_msg "NOT AUTOMATICALLY CONFIGURING X BECAUSE /opt/pimp/noxreconf is PRESENT!"
+			log_warning_msg "IF THIS IS NOT INTENDED rm /opt/pimp/noxreconf"
+		else		
+			log_action_msg "Removing Xorg.conf because /opt/pimp/noxreconf does not exist."
+			touch $PIMP_XORGCONF
+			$PIMP_RM -f $PIMP_XORGCONF 
+			log_action_msg "if you need to make manual changes to xorg.conf (NOT RECOMMENDED) use the command:"
+			log_action_msg "touch /opt/pimp/noxreconf"
+			log_action_msg "Calling aticonfig to create an xorg.conf" 
+			if $PIMP_ATICONFIG --adapter=all --initial -f --nobackup 	#IF4	
+			then
+				log_success_msg "aticonfig was successful, device list below"
+				$PIMP_ATICONFIG --lsa
+			else
+				log_failure_msg "PREMINE TASKS ERROR *** aticonfig failed - Mining disabled!"
+				touch /tmp/nomine
+				log_failure_msg "PREMINE TASKS ERROR *** /tmp/nomine is now present due to ati configuration failure, mining will NOT auto-start."
+				sleep 3	
+		fi	#FI4
+		fi #FI3
+			log_action_msg "Fixing /root/.Xauthority just incase it was corrupted by an unclean shutdown....."
+			touch /root/.Xauthority
+			$PIMP_RM /root/.Xauthority 2> /dev/null
+		if [ ! -e /etc/X11/xorg.conf ] ; #IF5
+		then
+			log_action_msg "***FAILSAFE*** trying to generate config with Xorg"#
+			if  /usr/bin/Xorg -configure #IF6
+			then
+				if [ -e /root/xorg.conf.new ] ; #IF7
+				then
+					log_warning_msg "***FAILSAFE*** Xorg created an xorg.conf"
+					mv /root/xorg.conf.new /etc/X11/xorg.conf
+	 			elif [ -e /xorg.conf.new ] ;     
+            	then
+               		log_warning_msg "***FAILSAFE*** Xorg created an xorg.conf"
+    	       		mv /xorg.conf.new /etc/X11/xorg.conf     
+			else
+				log_failure_msg "***CRITICAL*** if Xorg created a config, I cant find it"
+			fi #FI7
+			else
+				log_failure_msg "even Xorg failed to create an X config, bad news"
+		fi #FI6
+	fi #FI5
+		if  [ ! -e "/etc/X11/xorg.conf" ]; #IF8
+		then
+				log_failure_msg "no xorg.conf, X cannot be started"
+				exit 1
+		 fi #FI8
+fi #FI2 
+#premine tasks finished yay! on to the business end.
+		log_action_msg "Starting $DESC" "$NAME"
+
+		start-stop-daemon --start --oknodo --pidfile ${PIDFILE} --make-pidfile --background --exec /usr/sbin/nodm
+	
+		[ "$VERBOSE" != no ] && log_end_msg $?
+		;;
+	stop)
+		[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+		start-stop-daemon --stop --pidfile ${PIDFILE} --oknodo
+		rm -f ${PIDFILE}
+		[ "$VERBOSE" != no ] && log_end_msg $?
+		;;
+	restart|force-reload)
+		$0 stop
+		$0 start
+		;;
+	*)
+		log_success_msg "Usage: $0 {start|stop|restart|force-reload}" >&2
+		exit 1
+		;;
+esac
+
+
+exit 0
