@@ -147,7 +147,6 @@ case "$1" in
 				log_failure_msg "PREMINE TASKS ERROR *** /tmp/nomine is now present due to ati configuration failure, mining will NOT auto-start."
 				sleep 3	
 		fi	#FI4
-		fi #FI3
 			log_action_msg "Fixing /root/.Xauthority just incase it was corrupted by an unclean shutdown....."
 			touch /root/.Xauthority
 			$PIMP_RM /root/.Xauthority 2> /dev/null
@@ -176,7 +175,6 @@ case "$1" in
 				log_failure_msg "no xorg.conf, X cannot be started"
 				exit 1
 		 fi #FI8
-fi #FI2 
 #premine tasks finished yay! on to the business end.
 		log_action_msg "Starting $DESC" "$NAME"
 
