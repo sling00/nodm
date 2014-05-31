@@ -65,14 +65,14 @@ case "$1" in
 			log_warning_msg "PREMINE WARNING: /nomine is present, mining will NOT be started automatically and all miners will be disabled for this session."
 			log_warning_msg "Continuing in 5 seconds..."
 			sleep 5
-			$DISABLEM $MINERS
+			$($DISABLEM $MINERS)
 		fi #FI1
 		if [ ! -e "/nomine" ]; then #IF2
 	    	log_action_msg "PREMINE INFO: /nomine not present, making sure miners are all enabled"
 	    	#REMOVE BEFORE DIST
 	    	sleep 5
 	    	#END REMOVE BEFORE DIST
-			$ENABLEM $MINERS
+			$($ENABLEM $MINERS)
 		fi #FI2
 		#End testing code
 
@@ -90,7 +90,7 @@ case "$1" in
 	    then log_warning_msg "/nox is present, XORG WILL NOT START UNTIL THIS FILE IS REMOVED"									
 			exit 1
 		fi #FI4
-		if [ -e $PIMP_NOXRECONF ]; #IF5
+		if [[ -e $PIMP_NOXRECONF ]]; #IF5
 		then	
 			log_warning_msg "NOT AUTOMATICALLY CONFIGURING X BECAUSE /opt/pimp/noxreconf is PRESENT!"
 			log_warning_msg "IF THIS IS NOT INTENDED rm /opt/pimp/noxreconf"
