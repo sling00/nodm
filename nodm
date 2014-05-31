@@ -7,7 +7,7 @@
 # Default-Stop:
 # Short-Description: No Display Manager / Premine scripts some code from BAMT init.d/gdm / PIMP Modifications by sling00.
 ### END INIT INFO
-#PIMP NODM V1.0.2
+#PIMP NODM V1.0.3
 
 set -e
 
@@ -50,12 +50,34 @@ PIMP_NOXRECONF=/opt/pimp/noxreconf
 PIMP_ATICONFIG=/usr/bin/aticonfig
 PIMP_XORGCONF=/etc/X11/xorg.conf
 PIMP_RM=/bin/rm
+#New test defines
+ENABLEM="/bin/chmod +x"
+DISABLEM="/bin/chmod -x"
+MINERS=`cat /opt/ifmi/poolmanager.conf | grep mpath: | sed -n -e 's/^.*mpath: //p'`
+#End test defines
 
 case "$1" in
 	start)
 			log_action_msg "*** PREMINE TASKS STARTING ***"
 			log_action_msg "Starting $DESC" "$NAME"
-		if [[ -e /tmp/nomine ]]; #IF1 
+		#New testing code
+		if [ -e "/nomine" ]; then
+			log_warning_msg "PREMINE WARNING: /nomine is present, mining will NOT be started automatically and all miners will be disabled for this session."
+			log_warning_msg "Continuing in 5 seconds..."
+			sleep 5
+			$DISABLEM $MINERS
+		fi
+		if [ ! -e "/nomine" ]; then
+	    	log_action_msg "PREMINE INFO: /nomine not present, making sure miners are all enabled"
+	    	#REMOVE BEFORE DIST
+	    	sleep 5
+	    	#END REMOVE BEFORE DIST
+			$ENABLEM $MINERS
+		fi
+		#End testing code
+
+		#Stable code	
+		if [ -e /tmp/nomine ]; #IF1 
 		then 
 			rm /tmp/nomine
 			log_warning_msg "PREMINE WARNING: /tmp/nomine was present, your last attempt at autoconfiguration failed...trying again anyway!"
@@ -63,11 +85,12 @@ case "$1" in
  		if [ "$NODM_ENABLED" = "no" ] || [ "$NODM_ENABLED" = "false" ];	
 		then log_warning_msg "Not starting $NAME because NODM_ENABLED is '$NODM_ENABLED' in /etc/default/$NAME"
 			exit 1
-		elif [[ -e $PIMP_NOX ]];
+		fi
+		if [ -e $PIMP_NOX ];
 	    then log_warning_msg "/nox is present, XORG WILL NOT START UNTIL THIS FILE IS REMOVED"									
 			exit 1
-		else
-		if [[ -e $PIMP_NOXRECONF ]]; #IF3
+		fi
+		if [ -e $PIMP_NOXRECONF ]; #IF3
 		then	
 			log_warning_msg "NOT AUTOMATICALLY CONFIGURING X BECAUSE /opt/pimp/noxreconf is PRESENT!"
 			log_warning_msg "IF THIS IS NOT INTENDED rm /opt/pimp/noxreconf"
@@ -81,7 +104,43 @@ case "$1" in
 			if $PIMP_ATICONFIG --adapter=all --initial -f --nobackup 	#IF4	
 			then
 				log_success_msg "aticonfig was successful, device list below"
+				echo "=================== Detected GPU(s) ==================="
+				
 				$PIMP_ATICONFIG --lsa
+				CARDNUM=`$PIMP_ATICONFIG --lsa | grep -c Radeon`
+				if [ -f /root/.gpucount  ];
+					then
+					PREVCOUNT=`cat /root/.gpucount`
+					else
+					PREVCOUNT="0"
+					echo "0" > /root/.gpucount
+				fi
+				if [ $CARDNUM -lt $PREVCOUNT ];
+				    then
+				    echo "======================================================="
+					log_failure_msg  "WARNING: Detected GPU count is LESS than what was detected on previous boot!"
+					log_failure_msg  "Resetting gpu count and setting /opt/ifmi/gpucountbad"
+					echo $CARDNUM > /root/.gpucount
+					touch /opt/ifmi/gpucountbad
+					chown www-data.root /opt/ifmi/gpucountbad
+					chmod 0666 /opt/ifmi/gpucountbad
+					echo 1 > /opt/ifmi/gpucountbad
+					elif [ $CARDNUM -eq $PREVCOUNT ];
+					then
+					echo "======================================================="
+					log_action_msg "New GPU Count is the same as it was before: $CARDNUM"
+					elif [ $CARDNUM -gt $PREVCOUNT ];
+					then
+					GPUDIFF=`echo $CARDNUM - $PREVCOUNT | bc`
+					echo "======================================================="
+					log_action_msg "$CARDNUM Total GPUs Detected..."
+					log_action_msg "$GPUDIFF New GPU(s) Detected...Resetting GPU Count"
+					echo $CARDNUM > /root/.gpucount
+					fi
+					echo "======================================================="
+				#Test Addition Uncomment to enable and give it a try!
+				#aticonfig --acpi-services=off
+				#End Test Addition
 			else
 				log_failure_msg "PREMINE TASKS ERROR *** aticonfig failed - Mining disabled!"
 				touch /tmp/nomine
