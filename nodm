@@ -91,7 +91,8 @@ case "$1" in
 			exit 1
 		fi #FI3
 		if [ -e $PIMP_NOX ]; #IF4
-	    then log_warning_msg "/nox is present, XORG GUI NOR MINING WILL START UNTIL THIS FILE IS REMOVED"									
+	    then log_warning_msg "/nox is present, XORG GUI NOR MINING WILL START UNTIL THIS FILE IS REMOVED"
+	    	$DISABLEM $MINERS									
 			exit 1
 		fi #FI4
 		if [ -e $PIMP_NOXRECONF ]; #IF5
@@ -112,7 +113,8 @@ case "$1" in
 				log_success_msg "aticonfig was successful, device list below"
 #			echo "=================== Detected GPU(s) ==================="
 #				
-#				$PIMP_ATICONFIG --lsa
+				$PIMP_ATICONFIG --lsa
+#				
 #				CARDNUM=`$PIMP_ATICONFIG --lsa | grep -c Radeon`
 #				if [ -f /root/.gpucount  ];
 #					then
@@ -143,7 +145,7 @@ case "$1" in
 #					log_action_msg "$GPUDIFF New GPU(s) Detected...Resetting GPU Count"
 #					echo $CARDNUM > /root/.gpucount
 #					fi
-#					echo "======================================================="
+					echo "======================================================="
 				#Test Addition Uncomment to enable and give it a try!
 				#aticonfig --acpi-services=off
 				#End Test Addition
