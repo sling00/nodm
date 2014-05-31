@@ -1,3 +1,4 @@
+#!/bin/bash
 ### BEGIN INIT INFO
 # Provides:       nodm
 # Should-Start:   console-screen kbd hal bluetooth
@@ -7,9 +8,10 @@
 # Default-Stop:
 # Short-Description: No Display Manager / Premine scripts some code from BAMT init.d/gdm / PIMP Modifications by sling00.
 ### END INIT INFO
-#PIMP NODM V1.0.3
+#PIMP NODM V1.0.4
 
-set -e
+#We don't want to fail if a sub process has a non 0 exit code.
+#set -e
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
 DESC="Automatic Display Manager"
@@ -61,39 +63,43 @@ case "$1" in
 			log_action_msg "*** PREMINE TASKS STARTING ***"
 			log_action_msg "Starting $DESC" "$NAME"
 		#New testing code
+		if [ -e "/opt/pimp/nomine" ];
+		then
+			rm /opt/pimp/nomine
+			log_warning_msg "PREMINE WARNING: /opt/pimp/nomine was present, your last attempt ati autoconfiguration failed...trying again anyway!"
+			$ENABLEM $MINERS
+		fi #/tmp/nomine FI #1
 		if [ -e "/nomine" ]; then #IF1
 			log_warning_msg "PREMINE WARNING: /nomine is present, mining will NOT be started automatically and all miners will be disabled for this session."
 			log_warning_msg "Continuing in 5 seconds..."
 			sleep 5
-			$($DISABLEM $MINERS)
+			$DISABLEM $MINERS
 		fi #FI1
 		if [ ! -e "/nomine" ]; then #IF2
 	    	log_action_msg "PREMINE INFO: /nomine not present, making sure miners are all enabled"
 	    	#REMOVE BEFORE DIST
 	    	sleep 5
 	    	#END REMOVE BEFORE DIST
-			$($ENABLEM $MINERS)
+			$ENABLEM $MINERS
 		fi #FI2
 		#End testing code
 
 		#Stable code	
-		if [ -e /tmp/nomine ]; #IF3 
-		then 
-			rm /tmp/nomine
-			log_warning_msg "PREMINE WARNING: /tmp/nomine was present, your last attempt at autoconfiguration failed...trying again anyway!"
-		fi #/tmp/nomine FI #1 / IF2 start
+		#  IF2 start
  		if [ "$NODM_ENABLED" = "no" ] || [ "$NODM_ENABLED" = "false" ];	
 		then log_warning_msg "Not starting $NAME because NODM_ENABLED is '$NODM_ENABLED' in /etc/default/$NAME"
 			exit 1
 		fi #FI3
 		if [ -e $PIMP_NOX ]; #IF4
-	    then log_warning_msg "/nox is present, XORG WILL NOT START UNTIL THIS FILE IS REMOVED"									
+	    then log_warning_msg "/nox is present, XORG GUI NOR MINING WILL START UNTIL THIS FILE IS REMOVED"									
 			exit 1
 		fi #FI4
-		if [[ -e $PIMP_NOXRECONF ]]; #IF5
+		if [ -e $PIMP_NOXRECONF ]; #IF5
 		then	
 			log_warning_msg "NOT AUTOMATICALLY CONFIGURING X BECAUSE /opt/pimp/noxreconf is PRESENT!"
 			log_warning_msg "IF THIS IS NOT INTENDED rm /opt/pimp/noxreconf"
+			log_success_msg "Device list below:"
+			$PIMP_ATICONFIG --lsa
 		else		
 			log_action_msg "Removing Xorg.conf because /opt/pimp/noxreconf does not exist."
 			touch $PIMP_XORGCONF
@@ -143,8 +149,11 @@ case "$1" in
 				#End Test Addition
 			else
 				log_failure_msg "PREMINE TASKS ERROR *** aticonfig failed - Mining disabled!"
-				touch /tmp/nomine
-				log_failure_msg "PREMINE TASKS ERROR *** /tmp/nomine is now present due to ati configuration failure, mining will NOT auto-start."
+				touch /opt/pimp/nomine
+				log_failure_msg "PREMINE TASKS ERROR *** /opt/pimp/nomine is now present due to ati configuration failure, mining will NOT auto-start."
+				log_failure_msg "Will try again next boot."
+				log_failure_msg "Going failsafe...."
+				$DISABLEM $MINERS
 				sleep 3	
 		fi	#FI6
 			log_action_msg "Fixing /root/.Xauthority just incase it was corrupted by an unclean shutdown....."
