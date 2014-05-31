@@ -108,7 +108,7 @@ case "$1" in
 			if $PIMP_ATICONFIG --adapter=all --initial -f --nobackup 	#IF6	
 			then
 				log_success_msg "aticonfig was successful, device list below"
-#			echo "=================== Detected GPU(s) ==================="
+			echo "=================== Detected GPU(s) ==================="
 #				
 				$PIMP_ATICONFIG --lsa
 #				
