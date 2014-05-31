@@ -77,9 +77,6 @@ case "$1" in
 		fi #FI1
 		if [ ! -e "/nomine" ]; then #IF2
 	    	log_action_msg "PREMINE INFO: /nomine not present, making sure miners are all enabled"
-	    	#REMOVE BEFORE DIST
-	    	sleep 5
-	    	#END REMOVE BEFORE DIST
 			$ENABLEM $MINERS
 		fi #FI2
 		#End testing code
