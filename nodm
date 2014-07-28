@@ -26,6 +26,7 @@ NODM_XSESSION=/etc/X11/Xsession
 NODM_X_OPTIONS="-nolisten tcp"
 NODM_USER=root
 NODM_MIN_SESSION_TIME=60
+TS=$(date --utc +%FT%TZ)
 if [ -f /etc/default/$NAME ]
 then
 	. /etc/default/$NAME
@@ -50,99 +51,104 @@ export NODM_XINIT NODM_XSESSION NODM_X_OPTIONS NODM_USER NODM_MIN_SESSION_TIME N
 PIMP_NOX=/nox
 PIMP_NOXRECONF=/opt/pimp/noxreconf
 PIMP_ATICONFIG=/usr/bin/aticonfig
+PIMP_NVIDIACONFIG=/usr/bin/nvidia-xconfig
 PIMP_XORGCONF=/etc/X11/xorg.conf
 PIMP_RM=/bin/rm
 #New test defines
 ENABLEM="/bin/chmod +x"
 DISABLEM="/bin/chmod -x"
 MINERS=`cat /opt/ifmi/poolmanager.conf | grep mpath: | sed -n -e 's/^.*mpath: //p'`
+KVERSION=`uname -r`
 #End test defines
-
-case "$1" in
-	start)
-			log_action_msg "*** PREMINE TASKS STARTING ***"
-			log_action_msg "Starting $DESC" "$NAME"
-		#New testing code
-		if [ -e "/opt/pimp/nomine" ];
-		then
-			rm /opt/pimp/nomine
-			log_warning_msg "PREMINE WARNING: /opt/pimp/nomine was present, your last attempt ati autoconfiguration failed...trying again anyway!"
-			$ENABLEM $MINERS
-		fi #/tmp/nomine FI #1
-		if [ -e "/nomine" ]; then #IF1
-			log_warning_msg "PREMINE WARNING: /nomine is present, mining will NOT be started automatically and all miners will be disabled for this session."
-			log_warning_msg "Continuing in 5 seconds..."
-			sleep 5
-			$DISABLEM $MINERS
+function f_devicelist() {
+				echo "=================== Detected GPU(s) ==================="
+#				
+#				$PIMP_LSPCI -v |
+ 					#Nvidia count
+ 					NVIDIACOUNT=`lspci -n -v | grep -c "0300: 10de"`
+ 					#ATI Count 
+ 					ATICOUNT=`lspci -n -v | grep -c "0300: 1002"`
+ 					# ATI Display
+ 				if [ "$ATICOUNT" -gt "0" ]; then
+				lspci -v | grep "VGA compatible " | cut -d " " -f 1,9- | cut -d "(" -f 1
+			    fi
+					#Nvidia Display
+				if [ "$NVIDIACOUNT" -gt "0" ]; then
+				lspci -v | grep "VGA compatible" | cut -d " " -f 1,5,7- | cut -d "(" -f 1
+				fi
+				CARDNUM=`lspci -v -n | grep -c "0300"`				
+#				CARDNUM=`$PIMP_ATICONFIG --lsa | grep -c Radeon`
+				if [ -f /root/.gpucount  ];
+					then
+					PREVCOUNT=`cat /root/.gpucount`
+					else
+					PREVCOUNT="0"
+					echo "0" > /root/.gpucount
+				fi
+				if [ $CARDNUM -lt $PREVCOUNT ];
+				    then
+				    echo "======================================================="
+ 					log_warning_msg  "WARNING: Detected GPU count is LESS than what was detected on previous boot!"
+					log_warning_msg  "Resetting gpu count and setting /opt/ifmi/gpucountbad"
+					echo $CARDNUM > /root/.gpucount
+					touch /opt/ifmi/gpucountbad
+					chown www-data.root /opt/ifmi/gpucountbad
+					chmod 0666 /opt/ifmi/gpucountbad
+					echo 1 > /opt/ifmi/gpucountbad
+					elif [ $CARDNUM -eq $PREVCOUNT ];
+					then
+					echo "======================================================="
+					log_action_msg "New GPU Count is the same as it was before: $CARDNUM"
+					elif [ $CARDNUM -gt $PREVCOUNT ];
+					then
+					GPUDIFF=`echo $CARDNUM - $PREVCOUNT | bc`
+					echo "======================================================="
+					log_action_msg "$CARDNUM Total GPUs Detected..."
+					log_action_msg "$GPUDIFF New GPU(s) Detected...Resetting GPU Count"
+					echo $CARDNUM > /root/.gpucount
+					fi
+					echo "======================================================="
+}
+function f_failsafeconfig() {
+		if [ ! -e /etc/X11/xorg.conf ]; then #IF1
+			log_action_msg "***FAILSAFE*** trying to generate config with Xorg"#
+			if  /usr/bin/Xorg -configure #IF2
+			then
+				if [ -e /root/xorg.conf.new ]; then #IF3
+					log_warning_msg "***FAILSAFE*** Xorg created an xorg.conf"
+					mv /root/xorg.conf.new /etc/X11/xorg.conf
+	 			elif [ -e /xorg.conf.new ] ; then
+               		log_warning_msg "***FAILSAFE*** Xorg created an xorg.conf"
+    	       		mv /xorg.conf.new /etc/X11/xorg.conf     
+				else
+				log_failure_msg "***CRITICAL*** if Xorg created a config, I cant find it"
+				fi #FI3
+			else
+				log_failure_msg "even Xorg failed to create an X config, bad news"
+			fi #FI2
 		fi #FI1
-		if [ ! -e "/nomine" ]; then #IF2
-	    	log_action_msg "PREMINE INFO: /nomine not present, making sure miners are all enabled"
-			$ENABLEM $MINERS
-		fi #FI2
-		#End testing code
-
-		#Stable code	
-		#  IF2 start
- 		if [ "$NODM_ENABLED" = "no" ] || [ "$NODM_ENABLED" = "false" ];	
-		then log_warning_msg "Not starting $NAME because NODM_ENABLED is '$NODM_ENABLED' in /etc/default/$NAME"
-			exit 1
-		fi #FI3
-		if [ -e $PIMP_NOX ]; #IF4
-	    then log_warning_msg "/nox is present, XORG WILL NOT START UNTIL THIS FILE IS REMOVED"
-	   						
-			exit 1
-		fi #FI4
-		if [ -e $PIMP_NOXRECONF ]; #IF5
-		then	
-			log_warning_msg "NOT AUTOMATICALLY CONFIGURING X BECAUSE /opt/pimp/noxreconf is PRESENT!"
-			log_warning_msg "IF THIS IS NOT INTENDED rm /opt/pimp/noxreconf"
-			log_success_msg "Device list below:"
-			$PIMP_ATICONFIG --lsa
-		else		
-			log_action_msg "Removing Xorg.conf because /opt/pimp/noxreconf does not exist."
-			touch $PIMP_XORGCONF
-			$PIMP_RM -f $PIMP_XORGCONF 
-			log_action_msg "if you need to make manual changes to xorg.conf (NOT RECOMMENDED) use the command:"
-			log_action_msg "touch /opt/pimp/noxreconf"
-			log_action_msg "Calling aticonfig to create an xorg.conf" 
-			if $PIMP_ATICONFIG --adapter=all --initial -f --nobackup 	#IF6	
+}
+function f_nvidiaconfig() {
+	  if $PIMP_NVIDIACONFIG --coolbits 12 
+	  	then
+	  	log_success_msg "" 
+	    else 
+	    	log_failure_msg "PREMINE TASKS ERROR *** Nvidia-xconfig failed - Mining disabled!"
+	    	touch /opt/pimp/nomine
+			log_failure_msg "PREMINE TASKS ERROR *** /opt/pimp/nomine is now present due to ati configuration failure, mining will NOT auto-start."
+			log_failure_msg "Will try again next boot."
+			log_failure_msg "Going failsafe...."
+			$DISABLEM $MINERS
+			sleep 3	
+	    	f_failsafeconfig
+	  fi
+	  	#nvidia-xconfig --coolbits 12
+}
+function f_aticonfig() {
+		if $PIMP_ATICONFIG --adapter=all --initial -f --nobackup 	#IF6	
 			then
 				log_success_msg "aticonfig was successful, device list below"
-			echo "=================== Detected GPU(s) ==================="
-#				
-				$PIMP_ATICONFIG --lsa
-#				
-#				CARDNUM=`$PIMP_ATICONFIG --lsa | grep -c Radeon`
-#				if [ -f /root/.gpucount  ];
-#					then
-#					PREVCOUNT=`cat /root/.gpucount`
-#					else
-#					PREVCOUNT="0"
-#					echo "0" > /root/.gpucount
-#				fi
-#				if [ $CARDNUM -lt $PREVCOUNT ];
-#				    then
-#				    echo "======================================================="
-#					log_failure_msg  "WARNING: Detected GPU count is LESS than what was detected on previous boot!"
-#					log_failure_msg  "Resetting gpu count and setting /opt/ifmi/gpucountbad"
-#					echo $CARDNUM > /root/.gpucount
-#					touch /opt/ifmi/gpucountbad
-#					chown www-data.root /opt/ifmi/gpucountbad
-#					chmod 0666 /opt/ifmi/gpucountbad
-#					echo 1 > /opt/ifmi/gpucountbad
-#					elif [ $CARDNUM -eq $PREVCOUNT ];
-#					then
-#					echo "======================================================="
-#					log_action_msg "New GPU Count is the same as it was before: $CARDNUM"
-#					elif [ $CARDNUM -gt $PREVCOUNT ];
-#					then
-#					GPUDIFF=`echo $CARDNUM - $PREVCOUNT | bc`
-#					echo "======================================================="
-#					log_action_msg "$CARDNUM Total GPUs Detected..."
-#					log_action_msg "$GPUDIFF New GPU(s) Detected...Resetting GPU Count"
-#					echo $CARDNUM > /root/.gpucount
-#					fi
-					echo "======================================================="
+				f_devicelist
 				#Test Addition Uncomment to enable and give it a try!
 				#aticonfig --acpi-services=off
 				#End Test Addition
@@ -153,43 +159,73 @@ case "$1" in
 				log_failure_msg "Will try again next boot."
 				log_failure_msg "Going failsafe...."
 				$DISABLEM $MINERS
-				sleep 3	
-		fi	#FI6
+				sleep 3
+				f_failsafeconfig	
+		fi
+}
+function f_premine {
+		if [ -e "/opt/pimp/nomine" ]; then #IF1 
+			rm /opt/pimp/nomine
+			log_warning_msg "PREMINE WARNING: /opt/pimp/nomine was present, your last attempt ati autoconfiguration failed...trying again anyway!"
+			$ENABLEM $MINERS
+		fi #/tmp/nomine FI #1
+		if [ -e "/nomine" ]; then #IF2
+			log_warning_msg "PREMINE WARNING: /nomine is present, mining will NOT be started automatically and all miners will be disabled for this session."
+			log_warning_msg "Continuing in 5 seconds..."
+			sleep 5
+			$DISABLEM $MINERS
+		fi #FI2
+		if [ ! -e "/nomine" ]; then #IF3
+	    	log_action_msg "PREMINE INFO: /nomine not present, making sure miners are all enabled"
+			$ENABLEM $MINERS
+		fi #FI2
+#		fi #FI3 ? Does not match up to any other IF
+		if [ -e $PIMP_NOXRECONF ]; then #IF4
+			log_warning_msg "NOT AUTOMATICALLY CONFIGURING X BECAUSE /opt/pimp/noxreconf is PRESENT!"
+			log_warning_msg "IF THIS IS NOT INTENDED rm /opt/pimp/noxreconf"
+			log_success_msg "Device list below:"
+			f_devicelist
+		else		
+			log_action_msg "Removing Xorg.conf because /opt/pimp/noxreconf does not exist."
+			touch $PIMP_XORGCONF
+			$PIMP_RM -f $PIMP_XORGCONF 
+			log_action_msg "if you need to make manual changes to xorg.conf (NOT RECOMMENDED) use the command:"
+			log_action_msg "touch /opt/pimp/noxreconf"
+			# Are we ATI or NVidia, 
+			if [ -f /lib/modules/$KVERSION/updates/dkms/fglrx.ko ] || [ -d /lib/modules/fglrx ]; then #VENDORIF1
+				log_action_msg "Calling aticonfig to create an xorg.conf" 
+				f_aticonfig
+			#Insert nvidia preconfigure code here
+			fi #VENDORFI1
+			if [ -f /lib/modules/$KVERSION/kernel/drivers/video/nvidia.ko ] || [ -d /var/lib/dkms/nvidia ]; then #VENDORIF2
+				log_action_msg "Calling nvidia-xconfig to create an xorg.conf"
+				f_nvidiaconfig
+			fi #VENDORIF2
+			if  [ ! -e "/etc/X11/xorg.conf" ]; then #IF10
+					log_failure_msg "no xorg.conf, attempting to start anyway, this may turn out BAD."
+			fi #FI10
+		fi #FI1 
+}
+case "$1" in
+	start)
+			log_action_msg "*** PREMINE TASKS STARTING ***"
+			log_action_msg "Starting $DESC" "$NAME"
+			f_premine
 			log_action_msg "Fixing /root/.Xauthority just incase it was corrupted by an unclean shutdown....."
 			touch /root/.Xauthority
 			$PIMP_RM /root/.Xauthority 2> /dev/null
-		if [ ! -e /etc/X11/xorg.conf ] ; #IF7
-		then
-			log_action_msg "***FAILSAFE*** trying to generate config with Xorg"#
-			if  /usr/bin/Xorg -configure #IF8
-			then
-				if [ -e /root/xorg.conf.new ] ; #IF9
-				then
-					log_warning_msg "***FAILSAFE*** Xorg created an xorg.conf"
-					mv /root/xorg.conf.new /etc/X11/xorg.conf
-	 			elif [ -e /xorg.conf.new ] ;     
-            	then
-               		log_warning_msg "***FAILSAFE*** Xorg created an xorg.conf"
-    	       		mv /xorg.conf.new /etc/X11/xorg.conf     
-			else
-				log_failure_msg "***CRITICAL*** if Xorg created a config, I cant find it"
-			fi #FI9
-			else
-				log_failure_msg "even Xorg failed to create an X config, bad news"
-		fi #FI8
-	fi #FI7
-		if  [ ! -e "/etc/X11/xorg.conf" ]; #IF10
-		then
-				log_failure_msg "no xorg.conf, X cannot be started"
-				exit 1
-		 fi #FI10
-	fi #FI5
 #premine tasks finished yay! on to the business end.
-		log_action_msg "Starting $DESC" "$NAME"
-
-		start-stop-daemon --start --oknodo --pidfile ${PIDFILE} --make-pidfile --background --exec /usr/sbin/nodm
-	
-		[ "$VERBOSE" != no ] && log_end_msg $?
+			if [ -e $PIMP_NOX ]; then 
+	    	log_warning_msg "/nox is present, XORG WILL NOT START UNTIL THIS FILE IS REMOVED"				
+			exit 1
+			fi
+			if [ "$NODM_ENABLED" = "no" ] || [ "$NODM_ENABLED" = "false" ];	
+			then log_warning_msg "Not starting $NAME because NODM_ENABLED is '$NODM_ENABLED' in /etc/default/$NAME"
+			exit 1
+			fi
+			log_action_msg "Starting $DESC" "$NAME"
+			start-stop-daemon --start --oknodo --pidfile ${PIDFILE} --make-pidfile --background --exec /usr/sbin/nodm
+			[ "$VERBOSE" != no ] && log_end_msg $?
 		;;
 	stop)
 		[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
